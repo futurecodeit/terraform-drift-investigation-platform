@@ -1,0 +1,7 @@
+AzureActivity
+| where ResourceId contains "{resourceId}"
+| project
+    TimeGenerated,
+    Caller,
+    OperationNameValue
+| order by TimeGenerated desc

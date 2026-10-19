@@ -1,0 +1,2 @@
+resourcechanges
+| where targetResourceId == "{resourceId}"

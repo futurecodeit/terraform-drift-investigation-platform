@@ -1,0 +1,31 @@
+name: Terraform Drift Investigation
+
+on:
+  workflow_dispatch:
+
+jobs:
+
+  plan:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - uses: actions/checkout@v4
+
+    - name: Terraform Init
+      run: terraform init
+
+    - name: Terraform Plan
+      run: terraform plan -out=tfplan
+
+    - name: Export Json
+      run: terraform show -json tfplan > tfplan.json
+
+    - name: Drift Investigation
+      run: |
+
+        curl \
+        -X POST \
+        https://functionapp.azurewebsites.net/api/investigate \
+        --data @tfplan.json
