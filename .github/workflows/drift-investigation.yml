@@ -2,30 +2,64 @@ name: Terraform Drift Investigation
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "17 */4 * * *"
+
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
-
-  plan:
-
+  investigate:
     runs-on: ubuntu-latest
-
+    environment: dev
+    env:
+      ARM_USE_OIDC: true
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_name_suffix: ${{ vars.TF_NAME_SUFFIX }}
+    defaults:
+      run:
+        working-directory: environments/dev
     steps:
-
-    - uses: actions/checkout@v4
-
-    - name: Terraform Init
-      run: terraform init
-
-    - name: Terraform Plan
-      run: terraform plan -out=tfplan
-
-    - name: Export Json
-      run: terraform show -json tfplan > tfplan.json
-
-    - name: Drift Investigation
-      run: |
-
-        curl \
-        -X POST \
-        https://functionapp.azurewebsites.net/api/investigate \
-        --data @tfplan.json
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - name: Initialize backend
+        run: >-
+          terraform init -input=false
+          -backend-config="resource_group_name=${{ vars.TFSTATE_RESOURCE_GROUP }}"
+          -backend-config="storage_account_name=${{ vars.TFSTATE_STORAGE_ACCOUNT }}"
+          -backend-config="container_name=tfstate"
+          -backend-config="key=terraform-drift/dev.tfstate"
+          -backend-config="use_azuread_auth=true"
+      - name: Create refresh-only plan
+        id: plan
+        continue-on-error: true
+        run: terraform plan -refresh-only -detailed-exitcode -input=false -out=drift.tfplan
+      - name: Stop on Terraform error
+        if: steps.plan.outcome == 'failure' && steps.plan.outputs.exitcode != '2'
+        run: exit 1
+      - name: Send drift to investigation Function
+        if: steps.plan.outputs.exitcode == '2'
+        env:
+          DRIFT_FUNCTION_URL: ${{ vars.DRIFT_FUNCTION_URL }}
+          DRIFT_FUNCTION_KEY: ${{ secrets.DRIFT_FUNCTION_KEY }}
+        run: |
+          terraform show -json drift.tfplan > drift.tfplan.json
+          curl --fail-with-body --silent --show-error \
+            -X POST "$DRIFT_FUNCTION_URL" \
+            -H "Content-Type: application/json" \
+            -H "x-functions-key: $DRIFT_FUNCTION_KEY" \
+            --data-binary @drift.tfplan.json
+      - name: Report no drift
+        if: steps.plan.outputs.exitcode == '0'
+        run: echo "Terraform refresh-only plan found no drift."

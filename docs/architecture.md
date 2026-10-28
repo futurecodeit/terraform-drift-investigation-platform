@@ -1,346 +1,70 @@
-# AI-Powered Terraform Drift Investigation Platform
-
-## Overview
-
-The AI-Powered Terraform Drift Investigation Platform automatically detects configuration drift in Azure resources managed by Terraform and identifies:
-
-- Who changed the resource
-- What changed
-- When it changed
-- How it was changed
-- Whether PIM was used
-- Whether the change complies with platform standards
-- Recommended remediation actions
-
-The solution combines:
-
-- GitHub Actions
-- Terraform
-- Azure Functions
-- Azure AI Foundry
-- Azure OpenAI GPT-4o
-- Azure AI Search
-- Azure Resource Graph
-- Azure Activity Logs
-- Resource Change Analysis
-- Microsoft Entra ID
-- Microsoft Entra PIM
-- Azure Monitor
-- Service Bus
-- Cosmos DB
-
----
-
-# Architecture Goals
-
-## Functional Goals
-
-- Detect Terraform Drift
-- Attribute resource changes to users
-- Correlate audit and resource telemetry
-- Generate RCA automatically
-- Notify engineering teams
-- Maintain investigation history
-
----
-
-## Non-Functional Goals
-
-### Security
-
-- Managed Identity Everywhere
-- Private Endpoints
-- No Secrets in Code
-- Key Vault Integration
-
-### Reliability
-
-- Queue-based processing
-- Retry mechanisms
-- Dead Letter Queue support
-
-### Scalability
-
-- Event-driven architecture
-- Agent-based processing
-
-### Observability
-
-- Distributed tracing
-- Centralized logging
-- Investigation metrics
-
----
-
-# High-Level Architecture
-
-## CI/CD Layer
-
-Components:
-
-- GitHub Repository
-- GitHub Actions
-- Terraform State Storage
-
-Responsibilities:
-
-- Execute terraform plan
-- Export tfplan.json
-- Trigger drift investigation
-
----
-
-## Integration Layer
-
-Components:
-
-- Azure Service Bus
-- Azure Function App
-
-Responsibilities:
-
-- Accept drift events
-- Manage investigation lifecycle
-- Orchestrate agent execution
-
----
-
-## Investigation Layer
-
-### Terraform Agent
-
-Extracts:
-
-- Resource Name
-- Resource Type
-- Changed Properties
-- Before State
-- After State
-
----
-
-### Activity Log Agent
-
-Identifies:
-
-- Caller
-- Operation
-- Source
-- Timestamp
-
----
-
-### Change Analysis Agent
-
-Identifies:
-
-- Exact property change
-- Before value
-- After value
-
----
-
-### Identity Agent
-
-Retrieves:
-
-- User
-- Group Membership
-- Assigned Role
-- PIM Activation Details
-
----
-
-### RAG Agent
-
-Queries:
-
-- Terraform Repositories
-- Runbooks
-- Architecture Standards
-- Operations Documentation
-
----
-
-### Correlation Agent
-
-Correlates all collected evidence.
-
-Produces:
-
-- Investigation Context
-
----
-
-### Recommendation Agent
-
-Uses GPT-4o to generate:
-
-- Root Cause Analysis
-- Risk Assessment
-- Remediation Steps
-
----
-
-# Data Sources
-
-## Azure Activity Logs
-
-Used To:
-
-- Identify actor
-- Identify operation
-
----
-
-## Azure Resource Change Analysis
-
-Used To:
-
-- Determine exact property changes
-
----
-
-## Azure Resource Graph
-
-Used To:
-
-- Retrieve current resource state
-
----
-
-## Microsoft Entra ID
-
-Used To:
-
-- Resolve user information
-
----
-
-## Microsoft Entra PIM
-
-Used To:
-
-- Verify privileged access activations
-
----
-
-# AI Layer
-
-## Azure AI Foundry
-
-Provides:
-
-- Agent orchestration
-- Tool chaining
-- Workflow execution
-
----
-
-## Azure OpenAI
-
-Model:
-
-```text
-GPT-4o
+# Architecture
+
+## Implemented Flow
+
+The platform investigates actual Azure drift, not ordinary Terraform configuration changes. GitHub
+Actions runs `terraform plan -refresh-only -detailed-exitcode`, exports the plan with
+`terraform show -json`, and posts it to an authenticated Azure Function. The Function reads the
+Terraform `resource_drift` field, redacts sensitive values, optionally queries Activity Logs and
+Azure AI Search, and asks a Microsoft Foundry prompt agent for a bounded recommendation.
+
+```mermaid
+flowchart LR
+		GH[GitHub Actions] -->|OIDC + refresh-only plan| TF[Terraform state and Azure APIs]
+		TF -->|terraform show -json| GH
+		GH -->|HTTPS + function key| FA[Azure Functions Python v2]
+		FA --> CORE[Drift parser and redaction]
+		CORE -->|resource ID when present| LA[Log Analytics AzureActivity]
+		CORE -->|search query| SEARCH[Azure AI Search]
+		CORE -->|evidence and drift| AGENT[Microsoft Foundry prompt agent]
+		LA --> CORE
+		SEARCH --> CORE
+		AGENT --> CORE
+		CORE --> REPORT[JSON investigation report]
 ```
 
-Task:
+## Deployed Components
 
-- Generate RCA
-- Generate Recommendations
+| Component | Current implementation |
+| --- | --- |
+| Terraform | AzureRM 4.x and AzAPI 2.x; development resource group, Function, storage, monitoring, Foundry project, Search service, RBAC, and subscription Activity Log diagnostics. |
+| Azure Function | Python v2 HTTP endpoint at `/api/investigate`; function authorization key required. |
+| Drift analysis | Reads `resource_drift` only; proposed `resource_changes` do not count as drift. Property changes marked sensitive are redacted. |
+| Microsoft Foundry | `AIServices` Foundry resource and project; prompt agent created from the version-controlled recommendation instructions. Calls use `azure-ai-projects` 2.x and Entra ID. |
+| Azure AI Search | Entra-authenticated full-text index for approved Markdown/text knowledge sources. Current indexer is `scripts/index_documents.py`. |
+| Activity evidence | Optional `AzureActivity` query in Log Analytics for the resource ID from the Terraform plan. Caller is reported as recorded evidence, not as verified intent. |
+| State and CI | Azure Storage remote state; GitHub Actions uses OIDC for Azure and a Function key for the HTTP call. |
 
----
+The Foundry ARM account is represented by `Microsoft.CognitiveServices/accounts` with kind
+`AIServices`; this is the current Foundry resource shape, not a standalone legacy Azure OpenAI
+resource. Model selection and deployment are separate because availability, quota, and model names
+depend on the subscription and region.
 
-## Azure AI Search
+## Boundaries and Security
 
-Provides:
+- The Function identity receives Foundry User on the project, Search Index Data Reader on Search,
+	and Log Analytics Reader on the workspace.
+- The Function host currently uses its backing Storage account key through the AzureRM Function
+	resource. That key is held in protected Terraform state; restrict state access and enable storage
+	recovery controls. This is not an application-level AI credential.
+- GitHub authenticates to Azure with federated OIDC. A Function key is stored as a GitHub Actions
+	secret and sent in the `x-functions-key` header.
+- Terraform plan JSON can contain sensitive data. It is sent only over HTTPS to the Function and
+	is not uploaded as a workflow artifact. The parser redacts Terraform-marked sensitive fields in
+	its report.
+- The development stack uses public service endpoints with Entra authorization. Private endpoints,
+	private DNS, and network-restricted Function integration must be designed before production.
 
-- Vector Search
-- Semantic Search
-- Hybrid Search
+## Not Implemented Yet
 
-Indexed Data:
+The original drawings were broader than the checked-in code. Service Bus, Cosmos DB, durable
+retries, PIM or Microsoft Graph lookup, direct Resource Graph change-history calls, vector/agentic
+retrieval, and Teams/GitHub/ServiceNow notifications are not part of this deployment. There is no
+investigation-history store. The Kusto files are query references, not runtime integrations.
 
-```text
-Terraform Modules
-Standards
-Runbooks
-Architecture Documents
-```
+## Microsoft References
 
----
-
-# Security Architecture
-
-## Managed Identity
-
-Used By:
-
-- Function App
-- AI Foundry
-- Search
-- OpenAI
-
----
-
-## Key Vault
-
-Stores:
-
-- Webhook URLs
-- ServiceNow Credentials
-- Application Secrets
-
----
-
-## Private Endpoints
-
-Enabled For:
-
-- OpenAI
-- AI Search
-- Key Vault
-- Cosmos DB
-- Storage
-
----
-
-# Storage Components
-
-## Storage Account
-
-Purpose:
-
-- Terraform State
-- RAG Data
-
----
-
-## Cosmos DB
-
-Purpose:
-
-- Investigation History
-- Audit Trail
-- RCA Repository
-
----
-
-# Outputs
-
-## Teams
-
-Real-time alerts
-
-## GitHub
-
-PR comments
-
-## ServiceNow
-
-Incident generation
-
-## Cosmos DB
-
-Audit repository
+- [Microsoft Foundry SDK and endpoint guidance](https://learn.microsoft.com/azure/ai-foundry/how-to/develop/sdk-overview)
+- [Microsoft Foundry Agent Service overview](https://learn.microsoft.com/azure/ai-foundry/agents/overview)
+- [Azure AI Search overview](https://learn.microsoft.com/azure/search/search-what-is-azure-search)
+- [Terraform plan JSON format](https://developer.hashicorp.com/terraform/internals/json-format)
