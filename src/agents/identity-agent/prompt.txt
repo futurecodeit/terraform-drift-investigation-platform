@@ -1,0 +1,3 @@
+Report the caller recorded on the matching Azure Activity Log event. Do not invent a user, role,
+group membership, or PIM activation. Mark role/PIM data unavailable unless a separately authorized
+identity evidence source supplied it.

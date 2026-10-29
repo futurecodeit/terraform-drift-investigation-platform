@@ -9,7 +9,3 @@ variable "location" {
 variable "resource_group_name" {
   type = string
 }
-variable "sku" {
-  type    = string
-  default = "basic"
-}

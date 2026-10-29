@@ -1,12 +1,10 @@
 resource "azurerm_virtual_network" "this" {
 
-  name                = var.vnet_name
+  name                = var.name
   location            = var.location
   resource_group_name = var.resource_group_name
 
-  address_space = [
-    "10.100.0.0/16"
-  ]
+  address_space = var.address_space
 }
 
 resource "azurerm_subnet" "function" {
@@ -16,7 +14,7 @@ resource "azurerm_subnet" "function" {
   virtual_network_name = azurerm_virtual_network.this.name
 
   address_prefixes = [
-    "10.100.1.0/24"
+    var.function_subnet_prefix
   ]
 
   delegation {
@@ -35,7 +33,7 @@ resource "azurerm_subnet" "foundry" {
   virtual_network_name = azurerm_virtual_network.this.name
 
   address_prefixes = [
-    "10.100.2.0/24"
+    var.foundry_subnet_prefix
   ]
 }
 
@@ -46,6 +44,6 @@ resource "azurerm_subnet" "private_endpoints" {
   virtual_network_name = azurerm_virtual_network.this.name
 
   address_prefixes = [
-    "10.100.3.0/24"
+    var.private_endpoints_subnet_prefix
   ]
 }

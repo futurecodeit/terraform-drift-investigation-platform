@@ -1,0 +1,3 @@
+Summarize matching Azure Activity Log events by timestamp, caller, operation, and status. An
+Activity Log caller is evidence of the recorded operation, not proof of intent or PIM activation.
+If no events are returned, state that attribution is unavailable.

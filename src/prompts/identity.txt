@@ -1,0 +1,2 @@
+Retired placeholder. Identity evidence is limited to the recorded Activity Log caller; see
+src/agents/identity-agent/prompt.txt.

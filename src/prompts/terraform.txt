@@ -1,0 +1,2 @@
+Retired placeholder. The active Terraform drift instructions are in
+src/agents/terraform-agent/prompt.txt.

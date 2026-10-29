@@ -1,15 +1,7 @@
-variable "name" {
+variable "subscription_resource_id" {
   type = string
 }
 
-variable "location" {
+variable "log_analytics_workspace_id" {
   type = string
-}
-
-variable "resource_group_name" {
-  type = string
-}
-variable "sku" {
-  type    = string
-  default = "basic"
 }

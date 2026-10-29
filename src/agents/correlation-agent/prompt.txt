@@ -1,0 +1,3 @@
+Correlate drift and evidence by Azure resource ID and time. Keep unmatched Activity Log records
+separate, report evidence gaps, and do not assert causality when the available data only shows
+temporal proximity.

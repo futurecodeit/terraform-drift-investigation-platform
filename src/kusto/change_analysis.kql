@@ -1,2 +1,6 @@
+// Azure Resource Graph query. Replace the placeholder with a safely quoted resource ID.
 resourcechanges
-| where targetResourceId == "{resourceId}"
+| where targetResourceId =~ "{resourceId}"
+| project timestamp, changeType, targetResourceId, changedBy, clientType, changes
+| order by timestamp desc
+| take 100

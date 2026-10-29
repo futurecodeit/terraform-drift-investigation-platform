@@ -1,26 +1,11 @@
-from azure.search.documents import SearchClient
-from azure.identity import ManagedIdentityCredential
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "function-app"))
+
+from services.ai_search_client import search_standards
 
 class RagAgent:
 
-    def __init__(
-            self,
-            endpoint,
-            index_name):
-
-        self.client = SearchClient(
-            endpoint=endpoint,
-            index_name=index_name,
-            credential=ManagedIdentityCredential()
-        )
-
     def search(self, question):
-
-        results = self.client.search(question)
-
-        response = []
-
-        for doc in results:
-            response.append(doc)
-
-        return response
+        return search_standards(question)

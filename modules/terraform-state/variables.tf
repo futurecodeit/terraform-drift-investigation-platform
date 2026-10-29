@@ -1,15 +1,11 @@
-variable "name" {
-  type = string
-}
-
-variable "location" {
+variable "storage_account_name" {
   type = string
 }
 
 variable "resource_group_name" {
   type = string
 }
-variable "sku" {
-  type    = string
-  default = "basic"
+
+variable "location" {
+  type = string
 }

@@ -1,0 +1,2 @@
+Retired placeholder. The active Microsoft Foundry prompt is in
+src/agents/recommendation-agent/prompt.txt.

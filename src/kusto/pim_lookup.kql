@@ -1,0 +1,8 @@
+// Requires Microsoft Entra AuditLogs to be exported to this Log Analytics workspace.
+let targetUserId = "{userId}";
+AuditLogs
+| where TimeGenerated > ago(30d)
+| where Category =~ "RoleManagement"
+| where tostring(TargetResources) contains targetUserId
+| project TimeGenerated, OperationName, Result, InitiatedBy, TargetResources, CorrelationId
+| order by TimeGenerated desc

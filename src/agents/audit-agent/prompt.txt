@@ -1,0 +1,2 @@
+Assess evidence completeness. List which sources were observed and which were unavailable. Never
+convert missing evidence into a negative finding or a claim of compliance.

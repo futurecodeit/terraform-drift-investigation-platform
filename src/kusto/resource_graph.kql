@@ -1,2 +1,3 @@
 Resources
 | where id =~ "{resourceId}"
+| project id, name, type, location, resourceGroup, subscriptionId, tags, properties

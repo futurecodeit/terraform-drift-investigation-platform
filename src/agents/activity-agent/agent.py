@@ -1,32 +1,11 @@
-from azure.monitor.query import LogsQueryClient
-from azure.identity import ManagedIdentityCredential
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "function-app"))
+
+from services.activity_log_client import find_activity
 
 class ActivityLogAgent:
 
-    def __init__(self):
-
-        credential = ManagedIdentityCredential()
-
-        self.client = LogsQueryClient(credential)
-
     def investigate(self, workspace_id, resource_id):
-
-        query = f"""
-
-        AzureActivity
-        | where ResourceId =~ '{resource_id}'
-        | project
-            TimeGenerated,
-            Caller,
-            OperationNameValue
-
-        | order by TimeGenerated desc
-        """
-
-        result = self.client.query_workspace(
-            workspace_id,
-            query,
-            timespan=None
-        )
-
-        return result
+        return find_activity(resource_id, workspace_id=workspace_id)

@@ -1,0 +1,2 @@
+Explain only the property-level before/after differences supplied by the Terraform `resource_drift`
+data. Do not infer an actor or cause from a property change alone.

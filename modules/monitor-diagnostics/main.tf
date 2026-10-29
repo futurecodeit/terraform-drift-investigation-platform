@@ -2,9 +2,9 @@ resource "azurerm_monitor_diagnostic_setting" "activity" {
 
   name = "activity-logs"
 
-  target_resource_id = data.azurerm_subscription.current.id
+  target_resource_id = var.subscription_resource_id
 
-  log_analytics_workspace_id = azurerm_log_analytics_workspace.this.id
+  log_analytics_workspace_id = var.log_analytics_workspace_id
 
   enabled_log {
     category = "Administrative"

@@ -1,27 +1,11 @@
-import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "function-app"))
+
+from drift import analyze_plan
 
 class TerraformAnalyzerAgent:
 
     def analyze(self, tfplan_json):
-
-        drifts = []
-
-        for resource in tfplan_json["resource_changes"\]:
-
-            if resource["change"]["actions"] != ["no-op"\]:
-
-                drifts.append({
-                    "resource_name":
-                        resource["address"],
-
-                    "resource_type":
-                        resource["type"],
-
-                    "before":
-                        resource["change"]["before"],
-
-                    "after":
-                        resource["change"]["after"]
-                })
-
-        return drifts
+        return analyze_plan(tfplan_json)["drifts"]

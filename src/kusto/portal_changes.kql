@@ -1,0 +1,8 @@
+// Activity records are evidence of operations; portal usage alone does not prove intent.
+let targetResourceId = "{resourceId}";
+AzureActivity
+| where TimeGenerated > ago(30d)
+| where ResourceId =~ targetResourceId
+| where Caller != ""
+| project TimeGenerated, Caller, OperationNameValue, ActivityStatusValue, CallerIpAddress, CorrelationId
+| order by TimeGenerated desc

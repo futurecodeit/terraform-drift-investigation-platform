@@ -6,31 +6,12 @@ class CorrelationAgent:
             activity,
             change,
             identity,
-            rag):
-
+            rag=None):
         return {
-
-            "resource":
-                drift["resource_name"],
-
-            "changed_by":
-                identity["user"],
-
-            "role":
-                identity["role"],
-
-            "pim":
-                identity["pim"],
-
-            "property":
-                change["property"],
-
-            "old":
-                change["old"],
-
-            "new":
-                change["new"],
-
-            "expected":
-                rag[0]["content"]
+            "resource": drift.get("address"),
+            "resource_id": drift.get("resource_id"),
+            "changes": drift.get("changes", []),
+            "activity": activity or [],
+            "identity": identity or {"user": "unknown", "verification": "not available"},
+            "knowledge_evidence": rag or [],
         }

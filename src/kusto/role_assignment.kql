@@ -1,0 +1,8 @@
+AuthorizationResources
+| where type =~ "microsoft.authorization/roleassignments"
+| where tostring(properties.scope) =~ "{scope}"
+| project
+	principalId = tostring(properties.principalId),
+	roleDefinitionId = tostring(properties.roleDefinitionId),
+	scope = tostring(properties.scope),
+	assignmentId = id

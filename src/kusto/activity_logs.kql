@@ -1,7 +1,8 @@
+// Replace the placeholder with a Kusto-escaped resource ID.
+let targetResourceId = "{resourceId}";
 AzureActivity
-| where ResourceId contains "{resourceId}"
-| project
-    TimeGenerated,
-    Caller,
-    OperationNameValue
+| where TimeGenerated > ago(30d)
+| where ResourceId =~ targetResourceId
+| project TimeGenerated, Caller, OperationNameValue, ActivityStatusValue, CorrelationId
 | order by TimeGenerated desc
+| take 100

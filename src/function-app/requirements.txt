@@ -1,0 +1,6 @@
+azure-functions>=1.21.0
+azure-identity>=1.19.0
+azure-ai-projects>=2.3.0
+azure-search-documents>=11.6.0
+azure-monitor-query>=1.4.0
+openai>=3.0.0
