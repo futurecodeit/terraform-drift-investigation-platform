@@ -8,6 +8,7 @@ on:
       - "src/function-app/**"
       - "src/mcp/**"
       - ".github/workflows/**"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -65,3 +66,4 @@ jobs:
         run: terraform validate
       - name: Plan
         run: terraform plan -input=false -no-color
+ 
