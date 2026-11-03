@@ -1,6 +1,6 @@
 subscription_id = "5e546d2f-02ec-419a-8305-ad234518d98f"
 name_prefix     = "tdip"
-name_suffix     = "a1b2c3"
+name_suffix     = "a1b2c1"
 location        = "uksouth"
 
 # Create this model deployment in the Foundry project before creating the prompt agent.

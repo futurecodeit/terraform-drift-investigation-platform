@@ -5,8 +5,8 @@ from azure.search.documents import SearchClient
 
 
 def search_standards(query: str, top: int = 3) -> list[dict]:
-	endpoint = os.getenv("AI_SEARCH_ENDPOINT")
-	index_name = os.getenv("AI_SEARCH_INDEX")
+	endpoint = os.getenv("SEARCH_ENDPOINT")
+	index_name = os.getenv("SEARCH_INDEX")
 	if not endpoint or not index_name:
 		return []
 

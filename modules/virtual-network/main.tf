@@ -47,3 +47,11 @@ resource "azurerm_subnet" "private_endpoints" {
     var.private_endpoints_subnet_prefix
   ]
 }
+
+resource "azurerm_subnet" "container_apps" {
+  name                 = "snet-container-apps"
+  resource_group_name  = var.resource_group_name
+  virtual_network_name = azurerm_virtual_network.this.name
+
+  address_prefixes = [var.container_apps_subnet_prefix]
+}

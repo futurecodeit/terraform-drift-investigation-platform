@@ -53,3 +53,9 @@ variable "ai_search_sku" {
   description = "Azure AI Search SKU. Basic is suitable for development; select production capacity separately."
   default     = "basic"
 }
+
+variable "github_actions_client_id" {
+  type        = string
+  description = "Client ID of the GitHub Actions OIDC application used to publish the gateway image."
+  default = "fa1bd01c-f139-4721-a01b-2db798cb826f"
+}
