@@ -25,3 +25,8 @@ variable "private_endpoints_subnet_prefix" {
   type    = string
   default = "10.100.3.0/24"
 }
+variable "container_apps_subnet_prefix" {
+  type        = string
+  description = "Dedicated subnet for the private Container Apps environment. Workload profiles require at least /27."
+  default     = "10.100.4.0/27"
+}

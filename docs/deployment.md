@@ -9,11 +9,21 @@ For the detailed portal-based setup, RBAC, Function publishing, and end-to-end t
 The Terraform root in [`environments/dev`](../environments/dev) currently provisions:
 
 - A platform resource group
-- Log Analytics and Application Insights
+- A virtual network with separate Function integration, private endpoint, and Container Apps subnets
+- Log Analytics, a public Container Apps environment, and Application Insights
 - A Microsoft Foundry account and project (not a model deployment or agent)
 - Azure AI Search (not its index or documents)
-- A Linux Function App, its hosting plan and host Storage account
-- Function managed identity role assignments and subscription Activity Log diagnostics
+- A Linux Function App on the Elastic Premium plan, its host Storage account, and VNet integration
+- An Azure Container Registry and an externally reachable MCP Gateway Container App
+- Entra API authentication on the existing `github` app registration, restricted to the Function
+  App managed identity
+- Function and gateway managed-identity role assignments, Microsoft Graph application roles, and
+  subscription Activity Log diagnostics
+
+The dev root derives `MCP_GATEWAY_URL` from the gateway Container App's HTTPS FQDN. Terraform creates
+the gateway app before the Function App, so no manually supplied URL is required. The Container Apps
+environment is public and not VNet-integrated; the gateway's tool routes are protected by Entra
+authentication, while `/health` is unauthenticated for health checks.
 
 The Terraform state Storage account and private `tfstate` container must be created separately
 before Terraform initialization. The development root does not create its own backend.
@@ -22,17 +32,17 @@ index and upload knowledge; these are separate deployment steps below.
 
 ## Container Apps and MCP status
 
-Container Apps and MCP servers are described in some architecture/design documents, but they are
-not implemented in the current deployable stack. There is no Container Apps Terraform module or
-resource in the development root, no MCP server source or Docker image in this repository, and no
-Foundry MCP tool registration in the application or workflows.
-
-The Function currently queries Activity Logs, AI Search, and Foundry directly through its service
-clients. The Entra and PIM MCP components shown in design material are not part of this runtime.
-Do not treat the old generic “build image / deploy Container App / register custom tools” steps as
-completed deployment instructions. Add those steps only when the server implementations, image
-publishing, Container Apps infrastructure, identity/network permissions, and Foundry tool
-connections are added and tested.
+The dev root owns the Container Apps environment, gateway app, ACR, and gateway permissions. It
+reuses the existing GitHub OIDC app registration (`fa1bd01c-f139-4721-a01b-2db798cb826f`) for the
+gateway API. A Terraform import block adopts it and adds the `Gateway.Invoke` application role and
+API identifier URI while preserving its existing owner and Microsoft Graph permission declarations.
+The Function App managed identity is assigned the gateway role and is the only allowed API caller.
+Terraform initially uses a temporary Python HTTP placeholder so the first
+apply can create the registry and app before the image exists. After that apply, run the manual
+[`MCP Gateway Image` workflow](../.github/workflows/mcp-gateway-image.yml) to build and push the
+gateway image, configure system-identity ACR pull, update the app, and smoke-test `/health`. The
+Function App receives its final gateway URL during Terraform creation but cannot invoke the gateway
+until that workflow completes.
 
 ## Prerequisites
 
@@ -46,17 +56,18 @@ connections are added and tested.
 
 Register the resource providers required by the deployed Terraform resources if they are not
 already registered: `Microsoft.Resources`, `Microsoft.Storage`, `Microsoft.Web`,
-`Microsoft.Insights`, `Microsoft.CognitiveServices`, `Microsoft.Search`, and
-`Microsoft.Authorization`. Container Apps provider registration is not needed for this stack.
+`Microsoft.Insights`, `Microsoft.CognitiveServices`, `Microsoft.Search`, `Microsoft.Authorization`,
+`Microsoft.Network`, and `Microsoft.App`.
 
 ## 1. Configure Terraform state
 
-Create the state resource group, Storage account, and private `tfstate` container outside this
+The state resource group, Storage account, and private `tfstate` container are managed outside this
 Terraform root. Keep this backend separate from the Function's host Storage account. Enable
 appropriate state access controls, retention, and recovery protections for your environment.
 
-The backend block in [`environments/dev/backend.tf`](../environments/dev/backend.tf) is
-intentionally empty. The deployment workflow supplies the backend configuration at initialization:
+The backend block in [`environments/dev/backend.tf`](../environments/dev/backend.tf) is configured
+for the supplied Storage account. The deployment workflows supply matching backend overrides at
+initialization:
 
 | Backend setting | Value |
 | --- | --- |
@@ -67,7 +78,7 @@ intentionally empty. The deployment workflow supplies the backend configuration 
 | Authentication | Azure AD / OIDC (`use_azuread_auth=true`) |
 
 For local Terraform commands, sign in with `az login`, select the subscription, and initialize
-from the development root with the same backend values:
+from the development root:
 
 ```sh
 cd environments/dev
@@ -86,33 +97,55 @@ terraform plan
 Do not put credentials or backend secrets in the repository. Ensure the selected identity has
 the required state Blob permissions.
 
-## 2. Provision the Azure platform
+## 2. Provision the Azure platform and gateway
 
-The repository includes GitHub Actions workflows for provisioning:
+1. Configure the GitHub `dev` environment variables, initialize the `environments/dev` backend, and
+   run the Terraform Apply workflow. Terraform creates the platform, ACR, authenticated placeholder
+   Container App, Function App, Entra app-role assignment, and Azure/Graph role assignments in
+   dependency order.
+2. After the apply succeeds, run **Actions → MCP Gateway Image → Run workflow** and keep the default
+   image tag `v1` unless publishing another version. The workflow builds from the `src/mcp` context,
+   pushes to ACR with OIDC, configures the Container App's system identity to pull, updates the
+   running image, and checks the public `/health` route.
+3. Confirm that unauthenticated requests to `/tools/*` return 401 and the Function App can call the
+   gateway using its managed identity. Do not use the Function App before the image workflow
+   succeeds.
+
+The Function App identity receives `Azure AI User`, Search Index Data Reader, Log Analytics Reader,
+and subscription Reader. The gateway identity receives Monitoring Reader, Log Analytics Reader,
+Search Index Data Reader, subscription Reader, and the Graph application roles `User.Read.All`,
+`Directory.Read.All`, `AuditLog.Read.All`, and `RoleManagement.Read.Directory`.
+
+For CI-based provisioning, configure the GitHub `dev` environment with these **variables**:
 
 1. Configure the GitHub `dev` environment with these **variables**:
    `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `TF_NAME_SUFFIX`,
    `TFSTATE_RESOURCE_GROUP`, and `TFSTATE_STORAGE_ACCOUNT`.
 2. Configure an Entra federated credential for the repository's `dev` GitHub environment. Do not
-   create a client secret. Grant the GitHub service principal the minimum permissions needed for
-   Terraform apply and state access.
-3. Run **Actions → Terraform Apply → Run workflow** on the intended branch.
-4. Review the run and Terraform outputs. Confirm that resources were created in the intended
-   subscription and region.
+   create a client secret. The same OIDC identity needs Terraform permissions, ACR push, and scoped
+   Container App update permissions; Terraform configures the latter two on the new resources.
+3. Ensure the Terraform identity has the Azure role-assignment permissions and Microsoft Graph
+   application permissions required to create the requested assignments. Graph permissions require
+   tenant administrator consent.
+4. Run **Actions → Terraform Apply → Run workflow** on the intended branch, then run the
+   **MCP Gateway Image** workflow as described above.
+5. Confirm the resources are in the intended subscription and region.
 
 The [`Terraform Apply` workflow](../.github/workflows/terraform-apply.yml) is intended to run `terraform apply`
 against `environments/dev`. The [`Terraform Plan` workflow](../.github/workflows/terraform-plan.yml)
 validates and plans changes on pull requests. The development root also has values in
 [`terraform.tfvars`](../environments/dev/terraform.tfvars); confirm they match the target
 environment before applying. GitHub-provided `TF_VAR_subscription_id` and `TF_VAR_name_suffix`
-values override the corresponding local values.
+values override the corresponding local values. The workflow also supplies
+`TF_VAR_github_actions_client_id` from `AZURE_CLIENT_ID`.
 
-Do not assume the apply creates a Container Apps environment, Key Vault, virtual network, or any
-resources from modules that are not called by this Terraform root.
+The `Terraform Apply` workflow creates the gateway URL from the Container App resource; no
+`MCP_GATEWAY_URL` GitHub variable or manually entered Terraform variable is required.
 
 ## 3. Configure Foundry and Search
 
-Terraform creates the Foundry account/project and Search service only. After apply:
+Terraform creates the Foundry account/project and Search service only. After the shared-resource
+stage:
 
 1. In the Foundry project, deploy a compatible chat model and wait until it is ready.
 2. Create the versioned prompt agent using the project endpoint and actual model deployment name:
@@ -130,7 +163,8 @@ Terraform creates the Foundry account/project and Search service only. After app
    The script reads the recommendation prompt from `src/agents/recommendation-agent/prompt.txt`.
    It creates a new agent version when run; record the version it reports.
 3. Grant the operator identity Search Service Contributor and Search Index Data Contributor
-   permissions to create/populate the index. The Function identity needs Search Index Data Reader.
+   permissions to create/populate the index. The Function and Gateway identities receive
+   Search Index Data Reader from Terraform.
 4. Create the index and upload approved `.md` / `.txt` knowledge documents:
 
    ```sh
@@ -144,11 +178,12 @@ not configure vector search, embeddings, an indexer, or an MCP server.
 
 ## 4. Publish and configure the Function
 
-Terraform creates the Function App and its managed identity, but it does not deploy the Python
-application. The development root sets the Foundry project endpoint and agent name, Search endpoint
-and index name, Log Analytics workspace GUID, and Application Insights connection string as app
-settings. After apply, verify those settings and the Function identity's Foundry User, Search Index
-Data Reader, and Log Analytics Reader roles at the appropriate scopes.
+Terraform creates the Function App after the gateway Container App and derives its URL automatically.
+It sets `MCP_GATEWAY_URL`, `MCP_GATEWAY_SCOPE`, `FOUNDRY_PROJECT_ENDPOINT`, `SEARCH_ENDPOINT`,
+`SEARCH_INDEX`, `APPLICATIONINSIGHTS_CONNECTION_STRING`, the agent name, and Log Analytics workspace
+GUID as app settings. After apply, run the MCP Gateway Image workflow before testing tool calls.
+Verify the Function identity's `Azure AI User`, Search Index Data Reader, Log Analytics Reader,
+subscription Reader, and `Gateway.Invoke` application role.
 
 Publish the Python Function using the current Linux remote-build ZIP procedure in
 [Manual Setup from Scratch, section 7](./manual-steps.md#7-configure-and-deploy-the-function-app).

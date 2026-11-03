@@ -1,0 +1,2 @@
+class MCPException(Exception):
+    pass
