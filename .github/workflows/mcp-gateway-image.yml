@@ -7,6 +7,26 @@ on:
         description: Container image tag to publish
         required: true
         default: v1
+      RESOURCE_GROUP:
+        description: Azure Resource Group name
+        required: true
+        default: defaultresourcegroup-wus3
+      ACR_NAME:
+        description: Azure Container Registry name
+        required: true
+        default: csg100320031401b3a8
+      ACR_SERVER:
+        description: Azure Container Registry login server
+        required: true
+        default: csg100320031401b3a8.azurecr.io
+      APP_NAME:
+        description: Azure Container App name
+        required: true
+        default: mcp-gateway-container-app-dev
+      GATEWAY_URL:
+        description: Azure Container App URL
+        required: true
+        default: https://mcp-gateway-container-app-dev.wus3.azurecontainerapps.io
 
 permissions:
   contents: read
@@ -29,6 +49,11 @@ jobs:
     environment: dev
     env:
       IMAGE_TAG: ${{ inputs.image_tag }}
+      RESOURCE_GROUP: ${{ inputs.RESOURCE_GROUP }}
+      ACR_NAME: ${{ inputs.ACR_NAME }}
+      ACR_SERVER: ${{ inputs.ACR_SERVER }}
+      APP_NAME: ${{ inputs.APP_NAME }}
+      GATEWAY_URL: ${{ inputs.GATEWAY_URL }}
     defaults:
       run:
         working-directory: environments/dev
@@ -41,27 +66,6 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.9.8"
-
-      - name: Initialize backend
-        run: >-
-          terraform init -input=false
-          -backend-config="resource_group_name=${{ env.TFSTATE_RESOURCE_GROUP }}"
-          -backend-config="storage_account_name=${{ env.TFSTATE_STORAGE_ACCOUNT }}"
-          -backend-config="container_name=tfstate"
-          -backend-config="key=terraform-drift/dev.tfstate"
-          -backend-config="use_azuread_auth=true"
-
-      - name: Read deployment outputs
-        run: |
-          echo "RESOURCE_GROUP=$(terraform output -raw resource_group_name)" >> "$GITHUB_ENV"
-          echo "ACR_NAME=$(terraform output -raw mcp_gateway_acr_name)" >> "$GITHUB_ENV"
-          echo "ACR_SERVER=$(terraform output -raw mcp_gateway_acr_login_server)" >> "$GITHUB_ENV"
-          echo "APP_NAME=$(terraform output -raw mcp_gateway_container_app_name)" >> "$GITHUB_ENV"
-          echo "GATEWAY_URL=$(terraform output -raw mcp_gateway_url)" >> "$GITHUB_ENV"
 
       - name: Build and push gateway image
         working-directory: ${{ github.workspace }}
@@ -86,6 +90,54 @@ jobs:
             --name "$APP_NAME" \
             --resource-group "$RESOURCE_GROUP" \
             --image "$IMAGE" \
-            --command uvicorn \
-            --args server:app --host 0.0.0.0 --port 8000
+            --command "" \
+            --args ""
           curl --fail --retry 10 --retry-delay 15 --retry-all-errors "$GATEWAY_URL/health"
+
+      # - uses: hashicorp/setup-terraform@v3
+      #   with:
+      #     terraform_version: "1.9.8"
+
+      # - name: Initialize backend
+      #   run: >-
+      #     terraform init -input=false
+      #     -backend-config="resource_group_name=${{ env.TFSTATE_RESOURCE_GROUP }}"
+      #     -backend-config="storage_account_name=${{ env.TFSTATE_STORAGE_ACCOUNT }}"
+      #     -backend-config="container_name=tfstate"
+      #     -backend-config="key=terraform-drift/dev.tfstate"
+      #     -backend-config="use_azuread_auth=true"
+
+      # - name: Read deployment outputs
+      #   run: |
+      #     echo "RESOURCE_GROUP=$(terraform output -raw resource_group_name)" >> "$GITHUB_ENV"
+      #     echo "ACR_NAME=$(terraform output -raw mcp_gateway_acr_name)" >> "$GITHUB_ENV"
+      #     echo "ACR_SERVER=$(terraform output -raw mcp_gateway_acr_login_server)" >> "$GITHUB_ENV"
+      #     echo "APP_NAME=$(terraform output -raw mcp_gateway_container_app_name)" >> "$GITHUB_ENV"
+      #     echo "GATEWAY_URL=$(terraform output -raw mcp_gateway_url)" >> "$GITHUB_ENV"
+
+      # - name: Build and push gateway image
+      #   working-directory: ${{ github.workspace }}
+      #   run: |
+      #     IMAGE="$ACR_SERVER/mcp-gateway:$IMAGE_TAG"
+      #     az acr login --name "$ACR_NAME"
+      #     docker build \
+      #       --file src/mcp/activity-log-mcp/Dockerfile \
+      #       --tag "$IMAGE" \
+      #       src/mcp
+      #     docker push "$IMAGE"
+
+      # - name: Configure managed-identity pull and update the app
+      #   run: |
+      #     IMAGE="$ACR_SERVER/mcp-gateway:$IMAGE_TAG"
+      #     az containerapp registry set \
+      #       --name "$APP_NAME" \
+      #       --resource-group "$RESOURCE_GROUP" \
+      #       --server "$ACR_SERVER" \
+      #       --identity system
+      #     az containerapp update \
+      #       --name "$APP_NAME" \
+      #       --resource-group "$RESOURCE_GROUP" \
+      #       --image "$IMAGE" \
+      #       --command uvicorn \
+      #       --args server:app --host 0.0.0.0 --port 8000
+      #     curl --fail --retry 10 --retry-delay 15 --retry-all-errors "$GATEWAY_URL/health"

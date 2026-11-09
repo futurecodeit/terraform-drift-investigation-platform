@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY activity-log-mcp/requirements.txt ./requirements.txt
 
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --default-timeout=600 --retries=5 -r requirements.txt
 
 COPY activity-log-mcp/server.py ./server.py
 COPY activity-log-mcp/routes.py ./routes.py
